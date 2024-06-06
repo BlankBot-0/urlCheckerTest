@@ -3,92 +3,84 @@ package url_checker
 import (
 	"URLChecker/internal/config"
 	"URLChecker/internal/logger"
+	"context"
 	"fmt"
-	"math/rand/v2"
+	"golang.org/x/time/rate"
 	"net/http"
+	"sync"
 	"time"
 )
 
 type URLChecker struct {
-	RateLimit          time.Duration
-	BackoffCoefficient int
-	MaxDelay           time.Duration
-	l                  *logger.Loggers
+	RateLimiter *rate.Limiter
+	MaxDelay    time.Duration
+	loggers     *logger.Loggers
 }
 
 func NewURLChecker(cfg config.Checker, l *logger.Loggers) *URLChecker {
+	r := rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
 	return &URLChecker{
-		RateLimit:          cfg.RateLimit,
-		BackoffCoefficient: cfg.BackoffCoefficient,
-		MaxDelay:           cfg.MaxDelay,
-		l:                  l,
+		RateLimiter: r,
+		loggers:     l,
 	}
 }
 
-func (c *URLChecker) StartCheck(resChan chan CheckResult, urlString string) {
-	rateLimit := c.RateLimit
+func (c *URLChecker) StartCheck(ctx context.Context, wg *sync.WaitGroup, resChan chan fmt.Stringer, urlString string) {
 	for {
-		result, err := Check(urlString)
-		if err != nil && rateLimit < c.MaxDelay {
-			rateLimit = c.EvalRateLimitJitter(rateLimit)
-			c.l.Warn(fmt.Sprintf("Couldn't reach %s, retrying after %ds", urlString, rateLimit))
-		} else if err == nil {
-			rateLimit = c.RateLimit
+		// Wait(ctx context.Context) returns non-nil error when Context is canceled,
+		// or the expected wait time exceeds the Context's Deadline.
+		err := c.RateLimiter.Wait(ctx)
+		if err != nil {
+			c.loggers.Info(fmt.Sprintf("stopping monitoring %s", urlString))
+			wg.Done()
+			return
 		}
-		if rateLimit > c.MaxDelay {
-			rateLimit = c.MaxDelay
-		}
-
-		resChan <- *result
-		time.Sleep(rateLimit)
+		resChan <- Check(urlString)
 	}
 }
 
-func (c *URLChecker) StartChecks(resChan chan CheckResult, urls []string) {
+func (c *URLChecker) StartChecks(ctx context.Context, wg *sync.WaitGroup, resChan chan fmt.Stringer, urls []string) {
 	for _, urlString := range urls {
-		go c.StartCheck(resChan, urlString)
+		go c.StartCheck(ctx, wg, resChan, urlString)
 	}
 }
 
-func (c *URLChecker) EvalRateLimitJitter(rateLimit time.Duration) time.Duration {
-	seconds := rateLimit.Seconds()
-	jitter := rand.NormFloat64() * 0.1 * seconds
-	return time.Duration(seconds*float64(c.BackoffCoefficient) + jitter)
-}
-
-func Check(urlString string) (*CheckResult, error) {
+func Check(urlString string) fmt.Stringer {
 	startTime := time.Now()
 	res, err := http.Get(urlString)
 	responseTime := time.Since(startTime)
 
 	// Documentation: "Any returned error will be of type url.Error"
 	if err != nil {
-		return &CheckResult{
-			StatusCode:   0,
-			URL:          urlString,
-			ResponseTime: 0,
-			ErrMessage:   err.Error(),
-		}, err
+		return &pingError{
+			URL: urlString,
+			Err: err,
+		}
 	}
 
 	return &CheckResult{
 		StatusCode:   res.StatusCode,
 		URL:          urlString,
 		ResponseTime: responseTime,
-	}, err
+	}
 }
 
 type CheckResult struct {
 	StatusCode   int
 	URL          string
 	ResponseTime time.Duration
-	ErrMessage   string
 }
 
 func (r *CheckResult) String() string {
-	if r.ErrMessage == "" {
-		return fmt.Sprintf("URL: %s, Respose Time: %dms, StatusCode: %d", r.URL, r.ResponseTime.Milliseconds(), r.StatusCode)
-	}
-	return fmt.Sprintf("URL: %s, Error: %s",
-		r.URL, r.ErrMessage)
+	return fmt.Sprintf("URL: %s, Respose Time: %dms, StatusCode: %d",
+		r.URL, r.ResponseTime.Milliseconds(), r.StatusCode)
+}
+
+type pingError struct {
+	URL string
+	Err error
+}
+
+func (e pingError) String() string {
+	return fmt.Sprintf("URL: %s, Error: %v", e.URL, e.Err.Error())
 }

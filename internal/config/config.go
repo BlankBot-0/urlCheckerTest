@@ -14,14 +14,8 @@ type Config struct {
 }
 
 type Checker struct {
-	URLs        []string `yaml:"urls" env-required:"true"`
-	RateLimiter `yaml:"rate_limiter"`
-}
-
-type RateLimiter struct {
-	RateLimit          time.Duration `yaml:"rate_limit" env-default:"15s"`
-	BackoffCoefficient int           `yaml:"backoff_coefficient" env-default:"2"`
-	MaxDelay           time.Duration `yaml:"max_delay" env-default:"15m"`
+	URLs      []string      `yaml:"urls" env-required:"true"`
+	RateLimit time.Duration `yaml:"rate_limit" env-default:"15s"`
 }
 
 func MustLoad() *Config {
