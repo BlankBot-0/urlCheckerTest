@@ -1,0 +1,11 @@
+env: "local"
+service:
+  rate_limiter:
+    rate_limit: "5s"
+    backoff_coefficient: 2
+    max_delay: "15m"
+  urls:
+    - https://ya.ru/
+    - https://www.google.com/
+    - https://habr.com/
+    - https://www.youtube.com/
