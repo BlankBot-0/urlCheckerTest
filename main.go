@@ -7,8 +7,6 @@ import (
 	"context"
 	"fmt"
 	"golang.org/x/time/rate"
-	"log"
-	"os"
 	"os/signal"
 	"sync"
 	"syscall"
@@ -17,11 +15,7 @@ import (
 func main() {
 	cfg := config.MustLoad()
 	rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
-	logInfo := log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime)
-	logError := log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile)
-	logWarn := log.New(os.Stderr, "WARN\t", log.Ldate|log.Ltime|log.Lshortfile)
-
-	loggers := logger.New(logInfo, logWarn, logError)
+	loggers := logger.New()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()

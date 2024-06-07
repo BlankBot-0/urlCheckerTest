@@ -1,6 +1,7 @@
 env: "local"
 service:
   rate_limit: "5s"
+  timeout: "10s"
   urls:
     - https://ya.ru/
     - https://www.google.com/

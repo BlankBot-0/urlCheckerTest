@@ -1,6 +1,9 @@
 package logger
 
-import "log"
+import (
+	"log"
+	"os"
+)
 
 type Loggers struct {
 	logInfo *log.Logger
@@ -8,11 +11,11 @@ type Loggers struct {
 	logErr  *log.Logger
 }
 
-func New(logInfo, logWarn, logError *log.Logger) *Loggers {
+func New() *Loggers {
 	return &Loggers{
-		logInfo: logInfo,
-		logWarn: logWarn,
-		logErr:  logError,
+		logInfo: log.New(os.Stdout, "INFO\t", log.Ldate|log.Ltime),
+		logWarn: log.New(os.Stderr, "WARN\t", log.Ldate|log.Ltime|log.Lshortfile),
+		logErr:  log.New(os.Stderr, "ERROR\t", log.Ldate|log.Ltime|log.Lshortfile),
 	}
 }
 

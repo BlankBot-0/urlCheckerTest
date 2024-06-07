@@ -12,14 +12,18 @@ import (
 )
 
 type URLChecker struct {
+	Client      *http.Client
 	RateLimiter *rate.Limiter
-	MaxDelay    time.Duration
 	loggers     *logger.Loggers
 }
 
 func NewURLChecker(cfg config.Checker, l *logger.Loggers) *URLChecker {
 	r := rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
+	client := &http.Client{
+		Timeout: cfg.Timeout,
+	}
 	return &URLChecker{
+		Client:      client,
 		RateLimiter: r,
 		loggers:     l,
 	}
@@ -35,7 +39,7 @@ func (c *URLChecker) StartCheck(ctx context.Context, wg *sync.WaitGroup, resChan
 			wg.Done()
 			return
 		}
-		resChan <- Check(urlString)
+		resChan <- Check(c.Client, urlString)
 	}
 }
 
@@ -45,9 +49,9 @@ func (c *URLChecker) StartChecks(ctx context.Context, wg *sync.WaitGroup, resCha
 	}
 }
 
-func Check(urlString string) fmt.Stringer {
+func Check(c *http.Client, urlString string) fmt.Stringer {
 	startTime := time.Now()
-	res, err := http.Get(urlString)
+	res, err := c.Get(urlString)
 	responseTime := time.Since(startTime)
 
 	// Documentation: "Any returned error will be of type url.Error"

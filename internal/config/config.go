@@ -15,7 +15,8 @@ type Config struct {
 
 type Checker struct {
 	URLs      []string      `yaml:"urls" env-required:"true"`
-	RateLimit time.Duration `yaml:"rate_limit" env-default:"15s"`
+	RateLimit time.Duration `yaml:"rate_limit" env-default:"2s"`
+	Timeout   time.Duration `yaml:"timeout" env-default:"5s"`
 }
 
 func MustLoad() *Config {
