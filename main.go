@@ -29,7 +29,12 @@ func main() {
 
 	go func() {
 		for msg := range messages {
-			loggers.Info(msg.String())
+			switch v := msg.(type) {
+			case *url_checker.CheckResult:
+				loggers.Info(v.String())
+			case *url_checker.PingError:
+				loggers.Warn(v.String())
+			}
 		}
 	}()
 

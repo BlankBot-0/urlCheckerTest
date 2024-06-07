@@ -8,5 +8,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -o bin/urlChecker .
 
 FROM alpine:latest
 WORKDIR /root
+COPY /.env .
+COPY /config/config.yaml ./config/
 COPY --from=builder /app/bin/urlChecker .
 ENTRYPOINT ["./urlChecker"]

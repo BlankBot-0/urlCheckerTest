@@ -29,15 +29,7 @@ func TestCheck(t *testing.T) {
 		t.Errorf("got %s, expected %s", msg, expected.String())
 	}
 
-	redirectServers := make([]*httptest.Server, 11)
-	redirectServers[0] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	for i := range 10 {
-		redirectServers[i+1] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			http.Redirect(w, r, redirectServers[i].URL, http.StatusTemporaryRedirect)
-		}))
-	}
+	redirectServers := getRedirectServers()
 	defer func() {
 		for i := range redirectServers {
 			redirectServers[i].Close()
@@ -45,7 +37,7 @@ func TestCheck(t *testing.T) {
 	}()
 
 	msg = Check(client, redirectServers[10].URL).String()
-	expectedErr := &pingError{
+	expectedErr := &PingError{
 		URL: redirectServers[10].URL,
 		Err: fmt.Errorf("Get \"%s\": stopped after 10 redirects", redirectServers[0].URL),
 	}
@@ -67,7 +59,7 @@ func TestCheckTimeout(t *testing.T) {
 	msg := Check(client, ts.URL).String()
 	expectedError := fmt.Errorf("Get \"%s\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)",
 		ts.URL)
-	expected := pingError{
+	expected := PingError{
 		URL: ts.URL,
 		Err: expectedError,
 	}
@@ -83,34 +75,47 @@ func TestURLChecker(t *testing.T) {
 		http.StatusUnauthorized,
 		http.StatusTemporaryRedirect,
 	}
-	servers := make([]*httptest.Server, 11)
-	for i := range servers {
-		status := httpStatuses[i%len(httpStatuses)]
+	servers := getServers(httpStatuses)
+	defer func() {
+		for i := range servers {
+			servers[i].Close()
+		}
+	}()
 
-		servers[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if i%len(httpStatuses) == 3 {
-				http.Redirect(w, r, servers[0].URL, http.StatusTemporaryRedirect)
-			} else {
-				w.WriteHeader(status)
-			}
-		}))
-	}
+	redirectServers := getRedirectServers()
+	defer func() {
+		for i := range redirectServers {
+			redirectServers[i].Close()
+		}
+	}()
 
-	urls := make([]string, len(servers))
-	for i := range urls {
-		urls[i] = servers[i].URL
+	urls := make([]string, len(servers)+1)
+	for i := range len(servers) + 1 {
+		if i < len(servers) {
+			urls[i] = servers[i].URL
+		} else {
+			urls[i] = redirectServers[len(redirectServers)-1].URL
+		}
 	}
 	urlResults := make(map[string]fmt.Stringer)
 	for i, url := range urls {
-		status := httpStatuses[i%len(httpStatuses)]
+		if i >= len(servers) {
+			urlResults[url] = &PingError{
+				URL: redirectServers[len(redirectServers)-1].URL,
+				Err: fmt.Errorf("Get \"%s\": stopped after 10 redirects",
+					redirectServers[0].URL),
+			}
+		} else {
+			status := httpStatuses[i%len(httpStatuses)]
 
-		if i%len(httpStatuses) == 3 {
-			status = http.StatusOK
-		}
-		urlResults[url] = &CheckResult{
-			StatusCode:   status,
-			URL:          servers[i].URL,
-			ResponseTime: 0,
+			if i%len(httpStatuses) == 3 {
+				status = http.StatusOK
+			}
+			urlResults[url] = &CheckResult{
+				StatusCode:   status,
+				URL:          servers[i].URL,
+				ResponseTime: 0,
+			}
 		}
 	}
 
@@ -145,16 +150,50 @@ func TestURLChecker(t *testing.T) {
 			if urlResults[tmpUrl].String() != msg.String() {
 				t.Errorf("got %s, expected %s", msg.String(), urlResults[tmpUrl].String())
 			}
-			loggers.Info(msg.String())
+			switch v := msg.(type) {
+			case *CheckResult:
+				loggers.Info(v.String())
+			case *PingError:
+				loggers.Warn(v.String())
+			}
 		}
 	}()
 
 	go func() {
-		time.Sleep(6 * time.Second)
+		time.Sleep(10 * time.Second)
 		cancel()
 	}()
 
 	<-ctx.Done()
 	wg.Wait()
 	loggers.Info("shut down successfully")
+}
+
+func getRedirectServers() []*httptest.Server {
+	redirectServers := make([]*httptest.Server, 11)
+	redirectServers[0] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	for i := range 10 {
+		redirectServers[i+1] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, redirectServers[i].URL, http.StatusTemporaryRedirect)
+		}))
+	}
+	return redirectServers
+}
+
+func getServers(httpStatuses []int) []*httptest.Server {
+	servers := make([]*httptest.Server, 11)
+	for i := range servers {
+		status := httpStatuses[i%len(httpStatuses)]
+
+		servers[i] = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if i%len(httpStatuses) == 3 {
+				http.Redirect(w, r, servers[0].URL, http.StatusTemporaryRedirect)
+			} else {
+				w.WriteHeader(status)
+			}
+		}))
+	}
+	return servers
 }
