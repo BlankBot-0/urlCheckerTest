@@ -1,4 +1,5 @@
 env: "local"
+logs_target: "logs.txt" #stdout
 service:
   rate_limit: "5s"
   timeout: "10s"

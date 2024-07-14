@@ -120,7 +120,8 @@ func TestURLChecker(t *testing.T) {
 	}
 
 	cfg := config.Config{
-		Env: "local",
+		Env:        "local",
+		LogsTarget: "stdout",
 		Checker: config.Checker{
 			URLs:      urls,
 			RateLimit: time.Second,
@@ -128,10 +129,11 @@ func TestURLChecker(t *testing.T) {
 		},
 	}
 	rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
-	loggers := logger.New()
+	loggers := logger.New(&cfg)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	checker := NewURLChecker(cfg.Checker, loggers)
+	rateLimiter := rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
+	checker := NewURLChecker(cfg.Checker, loggers, rateLimiter)
 	messages := make(chan fmt.Stringer)
 
 	var wg sync.WaitGroup

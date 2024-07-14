@@ -14,13 +14,14 @@ import (
 
 func main() {
 	cfg := config.MustLoad()
-	rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
-	loggers := logger.New()
+	rateLimiter := rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
+	loggers := logger.New(cfg)
+	defer loggers.CloseTarget()
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	checker := url_checker.NewURLChecker(cfg.Checker, loggers)
+	checker := url_checker.NewURLChecker(cfg.Checker, loggers, rateLimiter)
 	messages := make(chan fmt.Stringer)
 
 	var wg sync.WaitGroup
@@ -31,9 +32,9 @@ func main() {
 		for msg := range messages {
 			switch v := msg.(type) {
 			case *url_checker.CheckResult:
-				loggers.Info(v.String())
+				loggers.Info(v)
 			case *url_checker.PingError:
-				loggers.Warn(v.String())
+				loggers.Warn(v)
 			}
 		}
 	}()

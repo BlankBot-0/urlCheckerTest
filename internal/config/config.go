@@ -9,8 +9,9 @@ import (
 )
 
 type Config struct {
-	Env     string `yaml:"env" env-default:"local"`
-	Checker `yaml:"service"`
+	Env        string `yaml:"env" env-default:"local"`
+	LogsTarget string `yaml:"logs_target" env-default:"stdout"`
+	Checker    `yaml:"service"`
 }
 
 type Checker struct {
