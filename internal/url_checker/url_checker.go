@@ -17,8 +17,7 @@ type URLChecker struct {
 	loggers     *logger.Loggers
 }
 
-func NewURLChecker(cfg config.Checker, l *logger.Loggers) *URLChecker {
-	r := rate.NewLimiter(rate.Every(cfg.RateLimit), 1)
+func NewURLChecker(cfg config.Checker, l *logger.Loggers, r *rate.Limiter) *URLChecker {
 	client := &http.Client{
 		Timeout: cfg.Timeout,
 	}
@@ -73,9 +72,9 @@ func Check(c *http.Client, urlString string) fmt.Stringer {
 
 // CheckResult contains information about successful request
 type CheckResult struct {
-	StatusCode   int
-	URL          string
-	ResponseTime time.Duration
+	StatusCode   int           `json:"status_code"`
+	URL          string        `json:"url"`
+	ResponseTime time.Duration `json:"response_time"`
 }
 
 func (r *CheckResult) String() string {
@@ -85,8 +84,8 @@ func (r *CheckResult) String() string {
 
 // PingError contains information about failed request
 type PingError struct {
-	URL string
-	Err error
+	URL string `json:"url"`
+	Err error  `json:"error"`
 }
 
 func (e PingError) String() string {
